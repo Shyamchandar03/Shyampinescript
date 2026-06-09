@@ -1,0 +1,159 @@
+//@version=5
+indicator("Prev Period HL Rays", shorttitle="PrevHL", overlay=true)
+
+// Inputs
+showDay   = input.bool(true,  "Show Prev Day HL")
+showWeek  = input.bool(true,  "Show Prev Week HL")
+showMonth = input.bool(true,  "Show Prev Month HL")
+lineWidth = input.int(2, "Line Width", minval=1)
+
+// Fetch timeframe highs/lows (no lookahead)
+day_high_tf   = request.security(syminfo.tickerid, "D", high,  lookahead=barmerge.lookahead_off)
+day_low_tf    = request.security(syminfo.tickerid, "D", low,   lookahead=barmerge.lookahead_off)
+week_high_tf  = request.security(syminfo.tickerid, "W", high,  lookahead=barmerge.lookahead_off)
+week_low_tf   = request.security(syminfo.tickerid, "W", low,   lookahead=barmerge.lookahead_off)
+month_high_tf = request.security(syminfo.tickerid, "M", high,  lookahead=barmerge.lookahead_off)
+month_low_tf  = request.security(syminfo.tickerid, "M", low,   lookahead=barmerge.lookahead_off)
+
+// Previous completed period values
+prev_day_high   = day_high_tf[1]
+prev_day_low    = day_low_tf[1]
+prev_week_high  = week_high_tf[1]
+prev_week_low   = week_low_tf[1]
+prev_month_high = month_high_tf[1]
+prev_month_low  = month_low_tf[1]
+
+// Persistent line objects
+var line dayHighLine   = na
+var line dayLowLine    = na
+var line weekHighLine  = na
+var line weekLowLine   = na
+var line monthHighLine = na
+var line monthLowLine  = na
+
+// Draw or remove lines according to inputs (explicit create/update to avoid parser issues)
+if showDay
+    // High
+    if not na(prev_day_high)
+        if na(dayHighLine)
+            dayHighLine := line.new(bar_index, prev_day_high, bar_index + 1, prev_day_high, xloc=xloc.bar_index, extend=extend.right)
+            line.set_color(dayHighLine, color.green)
+            line.set_width(dayHighLine, lineWidth)
+        else
+            line.set_y1(dayHighLine, prev_day_high)
+            line.set_y2(dayHighLine, prev_day_high)
+            line.set_x2(dayHighLine, bar_index + 1)
+            line.set_color(dayHighLine, color.green)
+            line.set_width(dayHighLine, lineWidth)
+    else
+        if not na(dayHighLine)
+            line.delete(dayHighLine)
+            dayHighLine := na
+
+    // Low
+    if not na(prev_day_low)
+        if na(dayLowLine)
+            dayLowLine := line.new(bar_index, prev_day_low, bar_index + 1, prev_day_low, xloc=xloc.bar_index, extend=extend.right)
+            line.set_color(dayLowLine, color.green)
+            line.set_width(dayLowLine, lineWidth)
+        else
+            line.set_y1(dayLowLine, prev_day_low)
+            line.set_y2(dayLowLine, prev_day_low)
+            line.set_x2(dayLowLine, bar_index + 1)
+            line.set_color(dayLowLine, color.green)
+            line.set_width(dayLowLine, lineWidth)
+    else
+        if not na(dayLowLine)
+            line.delete(dayLowLine)
+            dayLowLine := na
+else
+    if not na(dayHighLine)
+        line.delete(dayHighLine)
+        dayHighLine := na
+    if not na(dayLowLine)
+        line.delete(dayLowLine)
+        dayLowLine := na
+
+if showWeek
+    // High
+    if not na(prev_week_high)
+        if na(weekHighLine)
+            weekHighLine := line.new(bar_index, prev_week_high, bar_index + 1, prev_week_high, xloc=xloc.bar_index, extend=extend.right)
+            line.set_color(weekHighLine, color.white)
+            line.set_width(weekHighLine, lineWidth)
+        else
+            line.set_y1(weekHighLine, prev_week_high)
+            line.set_y2(weekHighLine, prev_week_high)
+            line.set_x2(weekHighLine, bar_index + 1)
+            line.set_color(weekHighLine, color.white)
+            line.set_width(weekHighLine, lineWidth)
+    else
+        if not na(weekHighLine)
+            line.delete(weekHighLine)
+            weekHighLine := na
+
+    // Low
+    if not na(prev_week_low)
+        if na(weekLowLine)
+            weekLowLine := line.new(bar_index, prev_week_low, bar_index + 1, prev_week_low, xloc=xloc.bar_index, extend=extend.right)
+            line.set_color(weekLowLine, color.white)
+            line.set_width(weekLowLine, lineWidth)
+        else
+            line.set_y1(weekLowLine, prev_week_low)
+            line.set_y2(weekLowLine, prev_week_low)
+            line.set_x2(weekLowLine, bar_index + 1)
+            line.set_color(weekLowLine, color.white)
+            line.set_width(weekLowLine, lineWidth)
+    else
+        if not na(weekLowLine)
+            line.delete(weekLowLine)
+            weekLowLine := na
+else
+    if not na(weekHighLine)
+        line.delete(weekHighLine)
+        weekHighLine := na
+    if not na(weekLowLine)
+        line.delete(weekLowLine)
+        weekLowLine := na
+
+if showMonth
+    // High
+    if not na(prev_month_high)
+        if na(monthHighLine)
+            monthHighLine := line.new(bar_index, prev_month_high, bar_index + 1, prev_month_high, xloc=xloc.bar_index, extend=extend.right)
+            line.set_color(monthHighLine, color.red)
+            line.set_width(monthHighLine, lineWidth)
+        else
+            line.set_y1(monthHighLine, prev_month_high)
+            line.set_y2(monthHighLine, prev_month_high)
+            line.set_x2(monthHighLine, bar_index + 1)
+            line.set_color(monthHighLine, color.red)
+            line.set_width(monthHighLine, lineWidth)
+    else
+        if not na(monthHighLine)
+            line.delete(monthHighLine)
+            monthHighLine := na
+
+    // Low
+    if not na(prev_month_low)
+        if na(monthLowLine)
+            monthLowLine := line.new(bar_index, prev_month_low, bar_index + 1, prev_month_low, xloc=xloc.bar_index, extend=extend.right)
+            line.set_color(monthLowLine, color.red)
+            line.set_width(monthLowLine, lineWidth)
+        else
+            line.set_y1(monthLowLine, prev_month_low)
+            line.set_y2(monthLowLine, prev_month_low)
+            line.set_x2(monthLowLine, bar_index + 1)
+            line.set_color(monthLowLine, color.red)
+            line.set_width(monthLowLine, lineWidth)
+    else
+        if not na(monthLowLine)
+            line.delete(monthLowLine)
+            monthLowLine := na
+else
+    if not na(monthHighLine)
+        line.delete(monthHighLine)
+        monthHighLine := na
+    if not na(monthLowLine)
+        line.delete(monthLowLine)
+        monthLowLine := na

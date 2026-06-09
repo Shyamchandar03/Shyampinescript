@@ -1,0 +1,349 @@
+//@version=5
+
+indicator(title='Heatmap Volume [xdecow]', shorttitle='HMV [xdecow]', format=format.volume, max_boxes_count=500, overlay=true)
+
+//------------------------------------------------------------------------------
+// Inputs
+
+
+length = input.int(610, title='MA Length', minval = 2, tooltip = 'Moving Average Length\n\n- Smaller values will respond more quickly and activate more frequently. (Best for short-term analysis)\n- Larger values will have a slower response, will be less sensitive to small volume variations, and will highlight large volumes. (Best for long-term analysis)\n\nFormula: How many stdev is the volume far from the Moving Average?')
+slength = input.int(610, title='Standard Deviation Length', minval=2, tooltip = 'Standard Deviation lookback period.\n\nFormula: How many stdev is the volume far from the Moving Average?')
+
+
+g_hmz = 'Heatmap Threshold Multipliers'
+thresholdExtraHigh = input.float(4, title='Extra High Multiplier', tooltip = 'Volume Threshold Multiplier\neg: 4 = 400% or 4 x Stdev above the mean', group=g_hmz)
+thresholdHigh = input(2.5, title='High Multiplier', group=g_hmz)
+thresholdMedium = input.float(1, title='Medium Multiplier', group=g_hmz)
+thresholdNormal = input(-0.5, title='Normal Multiplier', group=g_hmz)
+
+
+g_ob = 'Order Block'
+ob_enabled = input.bool(true, 'Mark Order Blocks', group=g_ob)
+ob_bull_color = input.color(color.new(#00b894, 85), 'Bullish Box Color', group=g_ob)
+ob_bear_color = input.color(color.new(#d63031, 85), 'Bearish Box Color', group=g_ob)
+ob_border_color = input.color(color.new(#ffffff, 0), 'Box Border Color', group=g_ob)
+ob_max_active = input.int(50, 'Maximum Active OB Boxes', minval=1, maxval=500, group=g_ob)
+
+
+
+//------------------------------------------------------------------------------
+// Colors
+
+
+// config
+g_color = 'Color settings'
+bcolor_enabled = input(true, 'Colored bars', group = g_color)
+zmode = input.string('Backgrounds', 'Display Heatmap Zones as', options=['None', 'Lines', 'Backgrounds', 'Both'], group = g_color)
+cmode = input.string('Heatmap', 'Color Mode', options=['Heatmap', 'Up/Down'], group = g_color, tooltip = '- Heatmap mode: colors based only on volume.\n- Up/Down mode: colors based on candle volume and direction.\nChange the cores below according to the selected mode.')
+
+
+// heatmap colors
+chm1 = #ff0000  // extra high red
+chm2 = #ff7800  // high orange
+chm3 = #ffcf03  // medium yellow
+chm4 = #a0d6dc  // normal
+chm5 = #1f9cac  // low
+
+// heatmap colors
+g_mhcolor = 'Heatmap colors'
+chmthresholdExtraHigh = input(chm1, 'Extra High', group=g_mhcolor)
+chmthresholdHigh = input(chm2, 'High', group=g_mhcolor)
+chmthresholdMedium = input(chm3, 'Medium', group=g_mhcolor)
+chmthresholdNormal = input(chm4, 'Normal', group=g_mhcolor)
+chmthresholdLow = input(chm5, 'Low', group=g_mhcolor)
+
+
+
+
+
+// up colors
+g_up = 'Up colors'
+cupthresholdExtraHigh = input(#00FF00, 'Extra High', group = g_up)
+cupthresholdHigh = input(#30FF30, 'High', group = g_up)
+cupthresholdMedium = input(#60FF60, 'Medium', group = g_up)
+cupthresholdNormal = input(#8FFF8F, 'Normal', group = g_up)
+cupthresholdLow = input(#BFFFBF, 'Low', group = g_up)
+
+
+// down colors
+g_down = 'Down colors'
+cdnthresholdExtraHigh = input(#FF0000, 'Extra High', group = g_down)
+cdnthresholdHigh = input(#FF3030, 'High', group = g_down)
+cdnthresholdMedium = input(#FF6060, 'Medium', group = g_down)
+cdnthresholdNormal = input(#FF8F8F, 'Normal', group = g_down)
+cdnthresholdLow = input(#FFBFBF, 'Low', group = g_down)
+
+
+// threshold colors
+cthresholdExtraHighUp = cmode == 'Heatmap' ? chmthresholdExtraHigh : cupthresholdExtraHigh
+cthresholdHighUp = cmode == 'Heatmap' ? chmthresholdHigh : cupthresholdHigh
+cthresholdMediumUp = cmode == 'Heatmap' ? chmthresholdMedium : cupthresholdMedium
+cthresholdNormalUp = cmode == 'Heatmap' ? chmthresholdNormal : cupthresholdNormal
+cthresholdLowUp = cmode == 'Heatmap' ? chmthresholdLow : cupthresholdLow
+
+cthresholdExtraHighDn = cmode == 'Heatmap' ? chmthresholdExtraHigh : cdnthresholdExtraHigh
+cthresholdHighDn = cmode == 'Heatmap' ? chmthresholdHigh : cdnthresholdHigh
+cthresholdMediumDn = cmode == 'Heatmap' ? chmthresholdMedium : cdnthresholdMedium
+cthresholdNormalDn = cmode == 'Heatmap' ? chmthresholdNormal : cdnthresholdNormal
+cthresholdLowDn = cmode == 'Heatmap' ? chmthresholdLow : cdnthresholdLow
+
+
+
+//------------------------------------------------------------------------------
+// Calcs
+
+
+length := length > bar_index + 1 ? bar_index + 1 : length
+slength := slength > bar_index + 1 ? bar_index + 1 : slength
+
+dir = close > open
+mean = ta.sma(volume, length)
+std = ta.stdev(volume, slength)
+
+// how many stdev is the volume far from the mean?
+// eg: stdbar = 2.5, is 2.5 * stdev above the mean (2.5 * stdev + mean)
+stdbar = (volume - mean) / std 
+
+bcolor = stdbar > thresholdExtraHigh ? dir ? cthresholdExtraHighUp : cthresholdExtraHighDn : stdbar > thresholdHigh ? dir ? cthresholdHighUp : cthresholdHighDn : stdbar > thresholdMedium ? dir ? cthresholdMediumUp : cthresholdMediumDn : stdbar > thresholdNormal ? dir ? cthresholdNormalUp : cthresholdNormalDn : dir ? cthresholdLowUp : cthresholdLowDn
+
+// heatmap lines
+zshow_lines = zmode == 'Lines' or zmode == 'Both'
+zshow_backgrounds = zmode == 'Backgrounds' or zmode == 'Both'
+
+ts1 = std * thresholdExtraHigh + mean
+ts2 = std * thresholdHigh + mean
+ts3 = std * thresholdMedium + mean
+ts4 = std * thresholdNormal + mean
+ts0 = 0
+
+tsDelta = ts1 - ts2
+tst = ts1 + tsDelta
+
+
+
+
+//------------------------------------------------------------------------------
+// Plots
+
+
+barcolor(bcolor_enabled ? bcolor : na, editable=false)
+
+
+// hidden heatmap lines to fill
+pt = plot(zshow_backgrounds ? tst : na, color=na, display=display.none, editable=false)
+p0 = plot(zshow_backgrounds ? ts0 : na, color=na, display=display.none, editable=false)
+p1 = plot(zshow_backgrounds ? ts1 : na, color=na, display=display.none, editable=false)
+p2 = plot(zshow_backgrounds ? ts2 : na, color=na, display=display.none, editable=false)
+p3 = plot(zshow_backgrounds ? ts3 : na, color=na, display=display.none, editable=false)
+p4 = plot(zshow_backgrounds ? ts4 : na, color=na, display=display.none, editable=false)
+
+
+// heatmap fills
+tpf = 85
+fill(pt, p1, color.new(chm1, tpf), title='Extra High heatmap zone')
+fill(p1, p2, color.new(chm2, tpf), title='High heatmap zone')
+fill(p2, p3, color.new(chm3, tpf), title='Medium heatmap zone')
+fill(p3, p4, color.new(chm4, tpf), title='Normal heatmap zone')
+fill(p4, p0, color.new(chm5,tpf), title='Low heatmap zone')
+
+
+// volume
+plot(volume, color=bcolor, style=plot.style_columns, title='Volume', editable=false)
+
+
+// moving average
+plot(mean, color=color.new(#000000, 0), linewidth=2, title='Moving Average', style=plot.style_line, display=display.none)
+
+
+// heatmap lines
+tpp = 50
+plot(zshow_lines ? ts1 : na, color=color.new(chm1, tpp), title='Extra High heatmap line')
+plot(zshow_lines ? ts2 : na, color=color.new(chm2, tpp), title='High heatmap line')
+plot(zshow_lines ? ts3 : na, color=color.new(chm3, tpp), title='Medium heatmap line')
+plot(zshow_lines ? ts4 : na, color=color.new(chm4, tpp), title='Normal heatmap line')
+
+
+
+//------------------------------------------------------------------------------
+// Alerts
+
+
+conditionExtraHigh = stdbar > thresholdExtraHigh
+conditionHigh = stdbar <= thresholdExtraHigh and stdbar > thresholdHigh
+conditionMedium = stdbar <= thresholdHigh and stdbar > thresholdMedium
+conditionNormal = stdbar <= thresholdMedium and stdbar > thresholdNormal
+conditionLow = stdbar <= thresholdNormal
+
+//------------------------------------------------------------------------------
+// Order Blocks
+
+var box[] ob_boxes = array.new_box()
+var bool[] ob_is_bullish = array.new_bool()
+var float[] ob_tops = array.new_float()
+var float[] ob_bottoms = array.new_float()
+
+if ob_enabled
+    if array.size(ob_boxes) > 0
+        i = array.size(ob_boxes) - 1
+        while i >= 0
+            active_box = array.get(ob_boxes, i)
+            active_bull = array.get(ob_is_bullish, i)
+            active_top = array.get(ob_tops, i)
+            active_bottom = array.get(ob_bottoms, i)
+            box.set_right(active_box, bar_index)
+
+            ob_mitigated = active_bull ? close < active_bottom : close > active_top
+            if ob_mitigated
+                array.remove(ob_boxes, i)
+                array.remove(ob_is_bullish, i)
+                array.remove(ob_tops, i)
+                array.remove(ob_bottoms, i)
+            i -= 1
+
+    isBlueOb = bar_index >= 2 and (conditionLow[2] or conditionNormal[2])
+    hasTwoYellow = bar_index >= 2 and conditionMedium[1] and conditionMedium
+    blueBull = bar_index >= 2 and close[2] > open[2]
+    yellow1Bull = bar_index >= 2 and close[1] > open[1]
+    yellow2Bull = close > open
+    blueBear = bar_index >= 2 and close[2] < open[2]
+    yellow1Bear = bar_index >= 2 and close[1] < open[1]
+    yellow2Bear = close < open
+    bullishFvg = bar_index >= 2 and low > high[2]
+    bearishFvg = bar_index >= 2 and high < low[2]
+    isBullishOb = isBlueOb and hasTwoYellow and blueBull and yellow1Bull and yellow2Bull and bullishFvg
+    isBearishOb = isBlueOb and hasTwoYellow and blueBear and yellow1Bear and yellow2Bear and bearishFvg
+
+    if isBullishOb or isBearishOb
+        new_ob_top = high[2]
+        new_ob_bottom = low[2]
+        new_ob_bg = isBullishOb ? ob_bull_color : ob_bear_color
+        new_ob_box = box.new(left=bar_index[2], top=new_ob_top, right=bar_index, bottom=new_ob_bottom, bgcolor=new_ob_bg, border_color=ob_border_color, force_overlay=true)
+        array.push(ob_boxes, new_ob_box)
+        array.push(ob_is_bullish, isBullishOb)
+        array.push(ob_tops, new_ob_top)
+        array.push(ob_bottoms, new_ob_bottom)
+
+    while array.size(ob_boxes) > ob_max_active
+        old_box = array.shift(ob_boxes)
+        box.delete(old_box)
+        array.shift(ob_is_bullish)
+        array.shift(ob_tops)
+        array.shift(ob_bottoms)
+
+//------------------------------------------------------------------------------
+// Previous Period High/Low Rays (robust line objects)
+
+// Fetch timeframe-level high/low series (aligned to current chart)
+day_high_tf = request.security(syminfo.tickerid, "D", high, lookahead=barmerge.lookahead_off)
+day_low_tf  = request.security(syminfo.tickerid, "D", low,  lookahead=barmerge.lookahead_off)
+week_high_tf = request.security(syminfo.tickerid, "W", high, lookahead=barmerge.lookahead_off)
+week_low_tf  = request.security(syminfo.tickerid, "W", low,  lookahead=barmerge.lookahead_off)
+month_high_tf = request.security(syminfo.tickerid, "M", high, lookahead=barmerge.lookahead_off)
+month_low_tf  = request.security(syminfo.tickerid, "M", low,  lookahead=barmerge.lookahead_off)
+
+// Previous completed period values (use [1] to get the prior period)
+prev_day_high = day_high_tf[1]
+prev_day_low  = day_low_tf[1]
+prev_week_high = week_high_tf[1]
+prev_week_low  = week_low_tf[1]
+prev_month_high = month_high_tf[1]
+prev_month_low  = month_low_tf[1]
+
+// Persistent line objects
+var line dayHighLine = na
+var line dayLowLine = na
+var line weekHighLine = na
+var line weekLowLine = na
+var line monthHighLine = na
+var line monthLowLine = na
+
+// Create/update previous day lines (green)
+if not na(prev_day_high)
+    if na(dayHighLine)
+        dayHighLine := line.new(bar_index, prev_day_high, bar_index + 1, prev_day_high, xloc=xloc.bar_index, extend=extend.right)
+        line.set_width(dayHighLine, 2)
+    else
+        line.set_y1(dayHighLine, prev_day_high)
+        line.set_y2(dayHighLine, prev_day_high)
+        line.set_x2(dayHighLine, bar_index + 1)
+
+if not na(prev_day_low)
+    if na(dayLowLine)
+        dayLowLine := line.new(bar_index, prev_day_low, bar_index + 1, prev_day_low, xloc=xloc.bar_index, extend=extend.right)
+        line.set_width(dayLowLine, 2)
+    else
+        line.set_y1(dayLowLine, prev_day_low)
+        line.set_y2(dayLowLine, prev_day_low)
+        line.set_x2(dayLowLine, bar_index + 1)
+
+// Create/update previous week lines (white)
+if not na(prev_week_high)
+    if na(weekHighLine)
+        weekHighLine := line.new(bar_index, prev_week_high, bar_index + 1, prev_week_high, xloc=xloc.bar_index, extend=extend.right)
+        line.set_width(weekHighLine, 2)
+    else
+        line.set_y1(weekHighLine, prev_week_high)
+        line.set_y2(weekHighLine, prev_week_high)
+        line.set_x2(weekHighLine, bar_index + 1)
+
+if not na(prev_week_low)
+    if na(weekLowLine)
+        weekLowLine := line.new(bar_index, prev_week_low, bar_index + 1, prev_week_low, xloc=xloc.bar_index, extend=extend.right)
+        line.set_width(weekLowLine, 2)
+    else
+        line.set_y1(weekLowLine, prev_week_low)
+        line.set_y2(weekLowLine, prev_week_low)
+        line.set_x2(weekLowLine, bar_index + 1)
+
+// Create/update previous month lines (red)
+if not na(prev_month_high)
+    if na(monthHighLine)
+        monthHighLine := line.new(bar_index, prev_month_high, bar_index + 1, prev_month_high, xloc=xloc.bar_index, extend=extend.right)
+        line.set_width(monthHighLine, 2)
+    else
+        line.set_y1(monthHighLine, prev_month_high)
+        line.set_y2(monthHighLine, prev_month_high)
+        line.set_x2(monthHighLine, bar_index + 1)
+
+if not na(prev_month_low)
+    if na(monthLowLine)
+        monthLowLine := line.new(bar_index, prev_month_low, bar_index + 1, prev_month_low, xloc=xloc.bar_index, extend=extend.right)
+        line.set_width(monthLowLine, 2)
+    else
+        line.set_y1(monthLowLine, prev_month_low)
+        line.set_y2(monthLowLine, prev_month_low)
+        line.set_x2(monthLowLine, bar_index + 1)
+
+// Set colors and widths explicitly (separate from creation to ensure styling)
+if not na(dayHighLine)
+    line.set_color(dayHighLine, color.new(#00FF00, 0))
+    line.set_width(dayHighLine, 2)
+if not na(dayLowLine)
+    line.set_color(dayLowLine, color.new(#00FF00, 0))
+    line.set_width(dayLowLine, 2)
+if not na(weekHighLine)
+    line.set_color(weekHighLine, color.new(#FFFFFF, 0))
+    line.set_width(weekHighLine, 2)
+if not na(weekLowLine)
+    line.set_color(weekLowLine, color.new(#FFFFFF, 0))
+    line.set_width(weekLowLine, 2)
+if not na(monthHighLine)
+    line.set_color(monthHighLine, color.new(#FF0000, 0))
+    line.set_width(monthHighLine, 2)
+if not na(monthLowLine)
+    line.set_color(monthLowLine, color.new(#FF0000, 0))
+    line.set_width(monthLowLine, 2)
+
+alertcondition(conditionExtraHigh, title='Any Extra High Vol', message='Any Bar Extra High Volume Threshold')
+alertcondition(conditionExtraHigh and open < close, title='Up Extra High', message='Up Bar Extra High Volume Threshold')
+alertcondition(conditionExtraHigh and open > close, title='Down Extra High', message='Down Bar Extra High Volume Threshold')
+
+alertcondition(conditionHigh, title='Any High Vol', message='Any Bar High Volume Threshold')
+alertcondition(conditionHigh and open < close, title='Up High Vol', message='Up Bar High Volume Threshold')
+alertcondition(conditionHigh and open > close, title='Down High Vol', message='Down Bar High Volume Threshold')
+
+alertcondition(conditionMedium, title='Any Medium Vol', message='Any Bar Medium Volume Threshold')
+alertcondition(conditionMedium and open < close, title='Up Medium Vol', message='Up Bar Medium Volume Threshold')
+alertcondition(conditionMedium and open > close, title='Down Medium Vol', message='Down Bar Medium Volume Threshold')
+
+
