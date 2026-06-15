@@ -23,6 +23,9 @@ ob_bull_color = input.color(color.new(#00b894, 85), 'Bullish Box Color', group=g
 ob_bear_color = input.color(color.new(#d63031, 85), 'Bearish Box Color', group=g_ob)
 ob_border_color = input.color(color.new(#ffffff, 0), 'Box Border Color', group=g_ob)
 ob_max_active = input.int(50, 'Maximum Active OB Boxes', minval=1, maxval=500, group=g_ob)
+ob_show_signals = input.bool(true, 'Show Long/Short Labels & TP/SL', group=g_ob)
+ob_sl_buffer_pct = input.float(0.1, 'SL Buffer (% of OB Range)', minval=0, step=0.05, group=g_ob)
+ob_rr_ratio = input.float(2.0, 'Risk:Reward Ratio (TP)', minval=0.5, step=0.5, group=g_ob)
 
 
 
@@ -181,6 +184,9 @@ var box[] ob_boxes = array.new_box()
 var bool[] ob_is_bullish = array.new_bool()
 var float[] ob_tops = array.new_float()
 var float[] ob_bottoms = array.new_float()
+var line[] ob_sl_lines = array.new_line()
+var line[] ob_tp_lines = array.new_line()
+var label[] ob_labels = array.new_label()
 
 if ob_enabled
     if array.size(ob_boxes) > 0
@@ -198,20 +204,24 @@ if ob_enabled
                 array.remove(ob_is_bullish, i)
                 array.remove(ob_tops, i)
                 array.remove(ob_bottoms, i)
+                line.delete(array.get(ob_sl_lines, i))
+                line.delete(array.get(ob_tp_lines, i))
+                label.delete(array.get(ob_labels, i))
+                array.remove(ob_sl_lines, i)
+                array.remove(ob_tp_lines, i)
+                array.remove(ob_labels, i)
             i -= 1
 
     isBlueOb = bar_index >= 2 and (conditionLow[2] or conditionNormal[2])
-    hasTwoYellow = bar_index >= 2 and conditionMedium[1] and conditionMedium
-    blueBull = bar_index >= 2 and close[2] > open[2]
-    yellow1Bull = bar_index >= 2 and close[1] > open[1]
-    yellow2Bull = close > open
-    blueBear = bar_index >= 2 and close[2] < open[2]
-    yellow1Bear = bar_index >= 2 and close[1] < open[1]
-    yellow2Bear = close < open
+    isYellowMid = bar_index >= 2 and conditionMedium[1]
+    isYellowOrStrongLast = conditionMedium or conditionHigh or conditionExtraHigh
+    obSmallerThanSecond = bar_index >= 2 and (high[2] - low[2]) < (high - low)
     bullishFvg = bar_index >= 2 and low > high[2]
     bearishFvg = bar_index >= 2 and high < low[2]
-    isBullishOb = isBlueOb and hasTwoYellow and blueBull and yellow1Bull and yellow2Bull and bullishFvg
-    isBearishOb = isBlueOb and hasTwoYellow and blueBear and yellow1Bear and yellow2Bear and bearishFvg
+    noRetraceBull = low >= low[2]
+    noRetraceBear = high <= high[2]
+    isBullishOb = isBlueOb and isYellowMid and isYellowOrStrongLast and obSmallerThanSecond and bullishFvg and noRetraceBull
+    isBearishOb = isBlueOb and isYellowMid and isYellowOrStrongLast and obSmallerThanSecond and bearishFvg and noRetraceBear
 
     if isBullishOb or isBearishOb
         new_ob_top = high[2]
@@ -223,12 +233,41 @@ if ob_enabled
         array.push(ob_tops, new_ob_top)
         array.push(ob_bottoms, new_ob_bottom)
 
+        line new_sl_line = na
+        line new_tp_line = na
+        label new_ob_label = na
+        if ob_show_signals
+            ob_range = new_ob_top - new_ob_bottom
+            buffer = ob_range * ob_sl_buffer_pct
+            if isBullishOb
+                entry = new_ob_top
+                sl = new_ob_bottom - buffer
+                risk = entry - sl
+                tp = entry + risk * ob_rr_ratio
+                new_sl_line := line.new(bar_index[2], sl, bar_index, sl, xloc=xloc.bar_index, extend=extend.right, color=color.red, width=1, style=line.style_dashed, force_overlay=true)
+                new_tp_line := line.new(bar_index[2], tp, bar_index, tp, xloc=xloc.bar_index, extend=extend.right, color=color.lime, width=1, style=line.style_dashed, force_overlay=true)
+                new_ob_label := label.new(bar_index[2], new_ob_bottom, text='LONG', style=label.style_label_up, color=color.new(ob_bull_color, 0), textcolor=color.white, size=size.small, force_overlay=true)
+            else
+                entry = new_ob_bottom
+                sl = new_ob_top + buffer
+                risk = sl - entry
+                tp = entry - risk * ob_rr_ratio
+                new_sl_line := line.new(bar_index[2], sl, bar_index, sl, xloc=xloc.bar_index, extend=extend.right, color=color.red, width=1, style=line.style_dashed, force_overlay=true)
+                new_tp_line := line.new(bar_index[2], tp, bar_index, tp, xloc=xloc.bar_index, extend=extend.right, color=color.lime, width=1, style=line.style_dashed, force_overlay=true)
+                new_ob_label := label.new(bar_index[2], new_ob_top, text='SHORT', style=label.style_label_down, color=color.new(ob_bear_color, 0), textcolor=color.white, size=size.small, force_overlay=true)
+        array.push(ob_sl_lines, new_sl_line)
+        array.push(ob_tp_lines, new_tp_line)
+        array.push(ob_labels, new_ob_label)
+
     while array.size(ob_boxes) > ob_max_active
         old_box = array.shift(ob_boxes)
         box.delete(old_box)
         array.shift(ob_is_bullish)
         array.shift(ob_tops)
         array.shift(ob_bottoms)
+        line.delete(array.shift(ob_sl_lines))
+        line.delete(array.shift(ob_tp_lines))
+        label.delete(array.shift(ob_labels))
 
 //------------------------------------------------------------------------------
 // Previous Period High/Low Rays (robust line objects)
